@@ -1,59 +1,52 @@
-# DiscordRPCforWord (EXPERIMENTAL!!)
+# DiscordRPCforWord
 
-DiscordRPCforWord is an experimental C++ utility designed to synchronize Microsoft Word activity with Discord Rich Presence in real-time. This project utilizes a COM Late Binding approach to ensure broad compatibility across various Microsoft Office versions without relying on static Type Library imports.
+**DiscordRPCforWord** is an experimental C++ utility that synchronizes your Microsoft Word activity with Discord Rich Presence in real-time.[web:2] It uses COM Late Binding for compatibility across Office versions like 2016, 2019, 2021, and 365.[web:9]
 
-Note: This project is currently labeled as EXPERIMENTAL!!. Use it at your own risk, as it interacts directly with the Windows COM layer and active processes.
+> **⚠️ EXPERIMENTAL!!** Use at your own risk—it interacts with Windows COM and active processes.[web:3]
 
-Key Features
-Dynamic Document Detection: Automatically identifies and tracks the currently active document in Microsoft Word.
+## Key Features
 
-English Status Localization: Displays activity using professional English terminology (e.g., Page 3 of 15).
+- **Dynamic Document Detection**: Tracks the active Word document automatically.
+- **English Status Display**: Shows professional status like "Page 3 of 15".
+- **Late Binding COM**: Uses IDispatch for version-independent Word object model access.[web:6]
+- **Performance Optimized**: Low CPU/memory use with C++17 optimizations.
+- **x64 Target**: Built for modern Windows systems.
 
-Late Binding COM Implementation: Leverages the IDispatch interface to interact with Microsoft Word's object model. This technique eliminates the need for #import directives, ensuring stability across different Office versions including 2016, 2019, 2021, and Office 365.
+## Technical Specs
 
-Performance Optimized: Compiled with high-performance optimizations to maintain a minimal CPU and memory footprint during background operation.
+| Aspect          | Details                          |
+|-----------------|----------------------------------|
+| Language        | C++17                            |
+| Core Tech       | Discord RPC SDK, Windows COM     |
+| IDE             | Visual Studio 2022               |
+| Platform        | x64                              |
+| Runtime Library | Multi-threaded DLL (/MD)         |[web:4]
 
-Technical Specifications
-Language: C++17
+## Dependencies
 
-Core Technologies:
+- **Discord RPC SDK**: Place headers in `deps/include`, `.lib` in `deps/lib`.[web:5]
+- **Windows SDK**: For COM and UTF-8 support (included in VS2022).
 
-Discord Rich Presence SDK
+## Build Instructions
 
-Windows Component Object Model (COM)
+1. Clone the repo:  git clone https://github.com/username/DiscordRPCforWord.git
+2. Open `DiscordRPCforWord.sln` in Visual Studio 2022.
+3. Set **Release | x64** configuration.
+4. In **Project Properties > C/C++ > Code Generation**: Set **Runtime Library** to **Multi-threaded DLL (/MD)**.
+5. Build Solution (**Ctrl+Shift+B**).[web:4]
 
-Development Environment: Visual Studio 2022
+## Usage
 
-Target Architecture: x64
+1. Launch Microsoft Word and open a document.
+2. Run `DiscordRPCforWord.exe`.
+3. Your Discord status updates automatically with document name and page count.
 
-Dependencies
-The following external libraries are required for successful compilation:
+**Note**: Ensure Discord is running with RPC enabled in your application settings.[web:11]
 
-Discord RPC SDK: Headers must be located in deps/include and the .lib file in deps/lib.
+## License
 
-Windows SDK: Required for COM functionality and UTF-8 string manipulation.
+MIT License. See the [LICENSE](LICENSE) file for details.
 
-Build and Installation Instructions
-Clone the repository:
+## Author
 
-Bash
-git clone https://github.com/username/DiscordRPCforWord.git
-Open the solution file (.sln) in Visual Studio 2022.
-
-Set the build configuration to Release and the platform to x64.
-
-Ensure the Runtime Library in the project properties is set to Multi-threaded DLL (/MD) to align with the Discord RPC dependencies.
-
-Execute Build Solution (Ctrl+Shift+B).
-
-Usage
-Launch Microsoft Word and open the document you wish to track.
-
-Run the DiscordRPCforWord.exe executable.
-
-The application will automatically interface with Discord to update your profile status with the current document name and page count.
-
-License
-This project is licensed under the Apache License 2.0. For more details, please refer to the LICENSE file.
-
-Developed by Mysticalx / Red Vellano
+Developed by **Dzikri Maulana**. Feel free to contribute or report issues!
