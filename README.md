@@ -1,7 +1,7 @@
 # DiscordRPCforWord
 
 <p align="center">
-  <img src="images/preview.png" width="900">
+  <img src="images/preview.png" alt="DiscordRPCforWord Preview" width="600">
 </p>
 
 **DiscordRPCforWord** is an experimental C++ utility that synchronizes your Microsoft Word activity with Discord Rich Presence in real-time. It uses COM Late Binding for compatibility across Office versions like 2016, 2019, 2021, and 365.
