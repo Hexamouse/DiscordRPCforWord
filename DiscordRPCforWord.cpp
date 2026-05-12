@@ -132,6 +132,101 @@ std::string WideToUTF8(const std::wstring& wstr) {
     return result;
 }
 
+// Baca Office version dari Registry
+std::string GetOfficeVersionFromRegistry() {
+    HKEY hKey;
+    const wchar_t* regPath = L"Software\\Microsoft\\Office\\ClickToRun\\Configuration";
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, regPath, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        wchar_t version[256] = { 0 };
+        DWORD size = sizeof(version);
+
+        if (RegQueryValueExW(hKey, L"VersionToReport", nullptr, nullptr, (LPBYTE)version, &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            std::wstring versionW(version);
+            std::string versionA = WideToUTF8(versionW);
+
+            // Parse versi dari format "16.0.xxxxx"
+            size_t firstDot = versionA.find('.');
+            if (firstDot != std::string::npos) {
+                size_t secondDot = versionA.find('.', firstDot + 1);
+                if (secondDot != std::string::npos) {
+                    std::string buildStr = versionA.substr(secondDot + 1);
+                    try {
+                        int build = std::stoi(buildStr);
+
+                        // Office version mapping berdasarkan build number
+                        if (build >= 17000) return "Microsoft Word 2024";
+                        if (build >= 16000) return "Microsoft Word 2021";
+                        if (build >= 13000) return "Microsoft Word 2019";
+                        if (build >= 10000) return "Microsoft Word 2016";
+                    }
+                    catch (...) {}
+                }
+            }
+        }
+
+        RegCloseKey(hKey);
+    }
+
+    return "";
+}
+
+// Ambil versi Word dan konversi ke tahun
+std::string GetWordVersionYear(IDispatch* pWordApp) {
+    // Coba baca dari Registry dulu
+    std::string registryVersion = GetOfficeVersionFromRegistry();
+    if (!registryVersion.empty()) {
+        return registryVersion;
+    }
+
+    // Fallback ke property Version
+    std::wstring versionStr = GetStringProperty(pWordApp, L"Version");
+    if (versionStr.empty()) return "Microsoft Word";
+
+    // Format versionStr biasanya: "16.0" atau "16.0.17531"
+    try {
+        size_t firstDot = versionStr.find(L'.');
+        if (firstDot == std::wstring::npos) return "Microsoft Word";
+
+        size_t secondDot = versionStr.find(L'.', firstDot + 1);
+        std::wstring buildStr;
+
+        if (secondDot != std::wstring::npos) {
+            buildStr = versionStr.substr(secondDot + 1);
+        }
+
+        int major = std::stoi(versionStr.substr(0, firstDot));
+
+        // Jika versi 16 ke atas (Modern Office)
+        if (major >= 16) {
+            if (buildStr.empty()) {
+                return "Microsoft Word 2016+";
+            }
+
+            try {
+                int build = std::stoi(buildStr);
+
+                // Estimasi Build Number
+                if (build >= 17000) return "Microsoft Word 2024";
+                if (build >= 14332) return "Microsoft Word 2021";
+                if (build >= 10000) return "Microsoft Word 2019";
+                return "Microsoft Word 2016";
+            }
+            catch (...) {
+                return "Microsoft Word 2016+";
+            }
+        }
+
+        // Logika lama untuk versi jadul (Pre-2016)
+        int year = 1997 + (major - 8) * 3;
+        return "Microsoft Word " + std::to_string(year);
+    }
+    catch (...) {
+        return "Microsoft Word";
+    }
+}
+
 // =====================================================
 // Discord callback
 // =====================================================
@@ -177,6 +272,9 @@ int main() {
             SUCCEEDED(pUnk->QueryInterface(IID_IDispatch, (void**)&pWordApp))) {
 
             try {
+                // Ambil versi Word
+                std::string wordVersion = GetWordVersionYear(pWordApp);
+
                 // Ambil ActiveDocument
                 IDispatch* pDoc = GetDispatchProperty(pWordApp, L"ActiveDocument");
                 // Ambil Selection
@@ -217,22 +315,22 @@ int main() {
                     std::string stateLabel = "Page " + std::to_string(curPage) + " of " + std::to_string(totalPage);
                     presence.state = stateLabel.c_str();
 
-
                     presence.largeImageKey = "word_logo";
-                    presence.largeImageText = "Microsoft Word";
+                    presence.largeImageText = wordVersion.c_str();
 
                     presence.startTimestamp = startTime;
 
                     Discord_UpdatePresence(&presence);
 
                     std::cout << "\r[Status] " << docName
-                        << " (" << curPage << "/" << totalPage << ")     " << std::flush;
+                        << " (" << curPage << "/" << totalPage << ") - " << wordVersion << "     " << std::flush;
                 }
                 else {
                     DiscordRichPresence presence;
                     memset(&presence, 0, sizeof(presence));
                     presence.details = "Idle (Tidak ada dokumen)";
                     presence.largeImageKey = "word_logo";
+                    presence.largeImageText = wordVersion.c_str();
                     Discord_UpdatePresence(&presence);
                 }
 
