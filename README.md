@@ -132,14 +132,6 @@ Place your preview image here:
 images/preview.png
 ```
 
-The image is displayed using:
-
-```html
-<p align="center">
-  <img src="images/preview.png" width="900">
-</p>
-```
-
 ---
 
 ## Project Structure
@@ -151,9 +143,6 @@ DiscordRPCforWord/
 ├── deps/
 │   ├── include/
 │   └── lib/
-│
-├── images/
-│   └── preview.png
 │
 ├── README.md
 └── DiscordRPCforWord.sln
