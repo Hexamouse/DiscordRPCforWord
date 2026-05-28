@@ -2,12 +2,60 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "version.lib")
 
 #include <iostream>
 #include <windows.h>
 #include <string>
 #include <cmath>
 #include "discord_rpc.h"
+
+// =====================================================
+// Helper: Ambil Build Information
+// =====================================================
+
+// Ambil file version dari executable
+std::string GetBuildVersion() {
+    wchar_t filename[MAX_PATH];
+    GetModuleFileNameW(NULL, filename, MAX_PATH);
+
+    DWORD verHandle = 0;
+    DWORD verSize = GetFileVersionInfoSizeW(filename, &verHandle);
+
+    if (verSize == 0) {
+        return "Build Unknown";
+    }
+
+    LPSTR verData = new char[verSize];
+    if (!GetFileVersionInfoW(filename, verHandle, verSize, verData)) {
+        delete[] verData;
+        return "Build Unknown";
+    }
+
+    UINT size = 0;
+    LPBYTE lpBuffer = NULL;
+    if (VerQueryValueW(verData, L"\\", (VOID FAR * FAR *)&lpBuffer, &size)) {
+        if (size) {
+            VS_FIXEDFILEINFO *verInfo = (VS_FIXEDFILEINFO *)lpBuffer;
+            if (verInfo->dwSignature == 0xfeef04bd) {
+                int major = (verInfo->dwFileVersionMS >> 16) & 0xffff;
+                int minor = (verInfo->dwFileVersionMS >> 0) & 0xffff;
+                int revision = (verInfo->dwFileVersionLS >> 16) & 0xffff;
+                int build = (verInfo->dwFileVersionLS >> 0) & 0xffff;
+
+                std::string result = "Build " + std::to_string(major) + "." + 
+                                    std::to_string(minor) + "." + 
+                                    std::to_string(revision) + "." + 
+                                    std::to_string(build);
+                delete[] verData;
+                return result;
+            }
+        }
+    }
+
+    delete[] verData;
+    return "Build Unknown";
+}
 
 // =====================================================
 // Helper: Panggil property dari IDispatch (COM late binding)
@@ -73,6 +121,30 @@ IDispatch* GetDispatchProperty(IDispatch* pDisp, const wchar_t* propName) {
     return ret;
 }
 
+// Panggil method dengan 1 parameter integer, hasil long
+long InvokeWithLongParamGetLong(IDispatch* pDisp, const wchar_t* methodName, long param) {
+    DISPID dispId;
+    LPOLESTR name = const_cast<LPOLESTR>(methodName);
+    if (FAILED(pDisp->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispId)))
+        return 0;
+
+    VARIANT arg;
+    VariantInit(&arg);
+    arg.vt = VT_I4;
+    arg.lVal = param;
+
+    DISPPARAMS dp = { &arg, nullptr, 1, 0 };
+    VARIANT result;
+    VariantInit(&result);
+    pDisp->Invoke(dispId, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &dp, &result, nullptr, nullptr);
+
+    long ret = 0;
+    if (result.vt == VT_I4) ret = result.lVal;
+    else if (result.vt == VT_I2) ret = result.iVal;
+    VariantClear(&result);
+    return ret;
+}
+
 // Panggil method dengan 1 parameter integer, hasil IDispatch*
 IDispatch* InvokeWithLongParam(IDispatch* pDisp, const wchar_t* methodName, long param) {
     DISPID dispId;
@@ -132,20 +204,69 @@ std::string WideToUTF8(const std::wstring& wstr) {
     return result;
 }
 
+// Format angka dengan separator ribuan (1000 -> "1,000")
+std::string FormatNumberWithComma(long number) {
+    std::string numStr = std::to_string(number);
+    std::string result = "";
+    int count = 0;
+    
+    for (int i = numStr.length() - 1; i >= 0; i--) {
+        if (count == 3) {
+            result = "," + result;
+            count = 0;
+        }
+        result = numStr[i] + result;
+        count++;
+    }
+    
+    return result;
+}
+
+// Ambil jumlah kata dari dokumen
+long GetWordCount(IDispatch* pDoc) {
+    // wdStatisticWords = 0
+    const long WD_STATISTIC_WORDS = 0;
+    
+    DISPID dispId;
+    LPOLESTR statName = const_cast<LPOLESTR>(L"ComputeStatistics");
+    
+    if (SUCCEEDED(pDoc->GetIDsOfNames(IID_NULL, &statName, 1, LOCALE_USER_DEFAULT, &dispId))) {
+        VARIANT arg;
+        VariantInit(&arg);
+        arg.vt = VT_I4;
+        arg.lVal = WD_STATISTIC_WORDS;
+        
+        DISPPARAMS dp = { &arg, nullptr, 1, 0 };
+        VARIANT res;
+        VariantInit(&res);
+        
+        pDoc->Invoke(dispId, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &dp, &res, nullptr, nullptr);
+        
+        long wordCount = 0;
+        if (res.vt == VT_I4) wordCount = res.lVal;
+        else if (res.vt == VT_I2) wordCount = res.iVal;
+        
+        VariantClear(&res);
+        return wordCount;
+    }
+    
+    return 0;
+}
+
 // Baca Office version dari Registry
 std::string GetOfficeVersionFromRegistry() {
     HKEY hKey;
     const wchar_t* regPath = L"Software\\Microsoft\\Office\\ClickToRun\\Configuration";
-
+    
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, regPath, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         wchar_t version[256] = { 0 };
         DWORD size = sizeof(version);
-
+        
         if (RegQueryValueExW(hKey, L"VersionToReport", nullptr, nullptr, (LPBYTE)version, &size) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
             std::wstring versionW(version);
             std::string versionA = WideToUTF8(versionW);
-
+            
             // Parse versi dari format "16.0.xxxxx"
             size_t firstDot = versionA.find('.');
             if (firstDot != std::string::npos) {
@@ -154,7 +275,7 @@ std::string GetOfficeVersionFromRegistry() {
                     std::string buildStr = versionA.substr(secondDot + 1);
                     try {
                         int build = std::stoi(buildStr);
-
+                        
                         // Office version mapping berdasarkan build number
                         if (build >= 17000) return "Microsoft Word 2024";
                         if (build >= 16000) return "Microsoft Word 2021";
@@ -165,10 +286,10 @@ std::string GetOfficeVersionFromRegistry() {
                 }
             }
         }
-
+        
         RegCloseKey(hKey);
     }
-
+    
     return "";
 }
 
@@ -252,6 +373,7 @@ int main() {
 
     std::cout << "========================================" << std::endl;
     std::cout << "   Word RPC for Discord sedang jalan... " << std::endl;
+    std::cout << "   " << GetBuildVersion() << std::endl;
     std::cout << "========================================" << std::endl;
 
     static int64_t startTime = (int64_t)time(0);
@@ -288,10 +410,7 @@ int main() {
                     // Halaman sekarang
                     long curPage = GetSelectionInfo(pSel, WD_ACTIVE_END_PAGE_NUMBER);
 
-                    // Total halaman via ComputeStatistics(wdStatisticPages=2)
-                    IDispatch* pStatResult = InvokeWithLongParam(pDoc, L"ComputeStatistics", WD_STATISTIC_PAGES);
-                    // ComputeStatistics langsung return long, bukan IDispatch
-                    // Pakai cara langsung:
+                    // Total halaman
                     DISPID dispId2;
                     LPOLESTR statName = const_cast<LPOLESTR>(L"ComputeStatistics");
                     long totalPage = 0;
@@ -309,10 +428,18 @@ int main() {
                         VariantClear(&res2);
                     }
 
+                    // Ambil jumlah kata
+                    long wordCount = GetWordCount(pDoc);
+                    std::string wordCountStr = FormatNumberWithComma(wordCount);
+
                     DiscordRichPresence presence;
                     memset(&presence, 0, sizeof(presence));
-                    presence.details = docName.c_str();
-                    std::string stateLabel = "Page " + std::to_string(curPage) + " of " + std::to_string(totalPage);
+                    
+                    std::string detailsLabel = "Filename: " + docName;
+                    presence.details = detailsLabel.c_str();
+                    
+                    std::string stateLabel = "Page " + std::to_string(curPage) + " of " + std::to_string(totalPage) + 
+                                           " | " + wordCountStr + " words";
                     presence.state = stateLabel.c_str();
 
                     presence.largeImageKey = "word_logo";
@@ -323,7 +450,8 @@ int main() {
                     Discord_UpdatePresence(&presence);
 
                     std::cout << "\r[Status] " << docName
-                        << " (" << curPage << "/" << totalPage << ") - " << wordVersion << "     " << std::flush;
+                        << " (" << curPage << "/" << totalPage << ") " 
+                        << wordCountStr << " words - " << wordVersion << "     " << std::flush;
                 }
                 else {
                     DiscordRichPresence presence;
